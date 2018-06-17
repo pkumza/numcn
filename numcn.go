@@ -1,3 +1,5 @@
+// Package numcn provides primitives for Interconversion
+// between Chinese numbers & Numbers.
 package numcn
 
 import (
@@ -188,7 +190,11 @@ func encodeFromInt64Helper(num uint64) (res []rune) {
 		}
 		return append(left, right...)
 	}
+	return encodeSmallNum(num)
+}
 
+// encode number that less than 10000
+func encodeSmallNum(num uint64) (res []rune) {
 	res = make([]rune, 0)
 	qian := num / 1000
 	bai := num / 100 % 10
