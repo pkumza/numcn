@@ -1,6 +1,9 @@
 package numcn
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 var cnNum = map[rune]int64{
 	'〇': 0,
@@ -65,6 +68,15 @@ const (
 	cnNegativePrefix = rune('负')
 )
 
+// MustDecodeToInt64 : decode a chinese number string into Int64 without error
+func MustDecodeToInt64(cn string) int64 {
+	res, err := DecodeToInt64(cn)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
+
 // DecodeToInt64 : decode a chinese number string into Int64
 func DecodeToInt64(cn string) (int64, error) {
 	chars := []rune(cn)
@@ -95,7 +107,7 @@ func decodeToInt64(chars []rune) (res int64, err error) {
 						return 0, err
 					}
 				}
-				return left*specialUnit.mul + right, nil
+				return sign * (left*specialUnit.mul + right), nil
 			}
 		}
 	}
@@ -116,4 +128,91 @@ func decodeToInt64(chars []rune) (res int64, err error) {
 		}
 	}
 	return res * sign, nil
+}
+
+var numCn = map[uint64]rune{
+	1: '一',
+	2: '二',
+	3: '三',
+	4: '四',
+	5: '五',
+	6: '六',
+	7: '七',
+	8: '八',
+	9: '九',
+}
+
+// EncodeFromInt64 : convert int64 into Chinese number
+func EncodeFromInt64(num int64) string {
+	if num == 0 {
+		return "零"
+	}
+	if num < 0 {
+		if num == math.MinInt64 {
+			return string(append([]rune{cnNegativePrefix}, encodeFromInt64Helper(uint64(math.MaxInt64)+1)...))
+		}
+		return string(append([]rune{cnNegativePrefix}, encodeFromInt64Helper(uint64(-num))...))
+	}
+
+	ch := encodeFromInt64Helper(uint64(num))
+
+	if len(ch) >= 2 && ch[0] == '一' && ch[1] == '十' {
+		return string(ch[1:])
+	}
+	return string(ch)
+}
+
+// encode
+func encodeFromInt64Helper(num uint64) (res []rune) {
+	yi := num / 100000000
+	if yi != 0 {
+		innerYi := num % 100000000
+		left := append(encodeFromInt64Helper(yi), '亿')
+		right := encodeFromInt64Helper(innerYi)
+		// 若千位不为零，且万位为零；或者是千万位不为零，且亿位为零，则不需要补读零。
+		// 例如：205,000读作“二十万五千”。
+		if innerYi != 0 && innerYi < 10000000 {
+			left = append(left, '零')
+		}
+		return append(left, right...)
+	}
+	wan := num / 10000
+	if wan != 0 {
+		innerWan := num % 10000
+		left := append(encodeFromInt64Helper(wan), '万')
+		right := encodeFromInt64Helper(innerWan)
+		// 若千位不为零，且万位为零；或者是千万位不为零，且亿位为零，则不需要补读零。
+		// 例如：205,000读作“二十万五千”。
+		if innerWan != 0 && innerWan < 1000 {
+			left = append(left, '零')
+		}
+		return append(left, right...)
+	}
+
+	res = make([]rune, 0)
+	qian := num / 1000
+	bai := num / 100 % 10
+	shi := num / 10 % 10
+	ge := num % 10
+	if qian != 0 {
+		res = append(res, numCn[qian], '千')
+	}
+	if bai != 0 {
+		res = append(res, numCn[bai], '百')
+	} else {
+		if qian != 0 && (shi != 0 || ge != 0) {
+			res = append(res, '零')
+		}
+	}
+	if shi != 0 {
+		res = append(res, numCn[shi], '十')
+	} else {
+		if bai != 0 && ge != 0 {
+			res = append(res, '零')
+		}
+	}
+	if ge != 0 {
+		res = append(res, numCn[ge])
+	}
+	return res
 }
