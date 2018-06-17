@@ -1,5 +1,7 @@
-[![MIT](https://img.shields.io/github/license/pkumza/numcn.svg?style=plastic)](https://github.com/pkumza/numcn/blob/master/LICENSE)
-![GitHub top language](https://img.shields.io/github/languages/top/pkumza/numcn.svg?style=plastic)
+[![MIT](https://img.shields.io/github/license/pkumza/numcn.svg)](https://github.com/pkumza/numcn/blob/master/LICENSE)
+![GitHub top language](https://img.shields.io/github/languages/top/pkumza/numcn.svg)
+![GitHub last commit](https://img.shields.io/github/last-commit/pkumza/numcn.svg)
+
 
 # numcn
 
