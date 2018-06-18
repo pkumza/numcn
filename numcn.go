@@ -51,23 +51,62 @@ var cnUnit = map[rune]int64{
 	'阡': 1000,
 }
 
-var cnSpecialUnit = []struct {
+var cnSpecialUnits = []struct {
 	cn  rune
 	mul int64
 }{
 	// https://zh.wikipedia.org/wiki/%E4%B8%AD%E6%96%87%E6%95%B0%E5%AD%97
 	// 在现代中文，“万进数”成为唯一的数字表示方式[j]，“上、中、下数”古法已不用，但仍有“兆应代表何值”的争议：
 	// 兆的具体含义颇受争议，已知的可以表示1e6、1e12、1e16等，目前以1e12计算。
-	{'京', 10000000000000000},
-	{'兆', 1000000000000},
-	{'亿', 100000000},
-	{'億', 100000000},
-	{'万', 10000},
-	{'萬', 10000},
+	{'京', 1e16},
+	{'兆', 1e12},
+	{'亿', 1e8},
+	{'億', 1e8},
+	{'万', 1e4},
+	{'萬', 1e4},
+}
+
+var cnExtremeUnits = []struct {
+	cn   rune
+	unit float64
+}{
+	{'载', 1e44},
+	{'正', 1e40},
+	{'涧', 1e36},
+	{'沟', 1e32},
+	{'穰', 1e28},
+	{'秭', 1e24},
+	{'垓', 1e20},
+	{'京', 1e16},
+	{'兆', 1e12},
+	{'亿', 1e8},
+	{'億', 1e8},
+	{'万', 1e4},
+	{'萬', 1e4},
+	{'又', 1e0},
+	{'分', 1e-1},
+	{'厘', 1e-2},
+	{'毫', 1e-3},
+	{'丝', 1e-4},
+	{'忽', 1e-5},
+	{'微', 1e-6},
+	{'纤', 1e-7},
+	{'沙', 1e-8},
+	{'尘', 1e-9},
+	{'纳', 1e-9},
+	{'埃', 1e-10},
+	{'渺', 1e-11},
+	{'漠', 1e-12},
+	{'皮', 1e-12},
+	{'飞', 1e-15},
+	{'阿', 1e-18},
+	{'仄', 1e-21},
+	{'幺', 1e-24},
 }
 
 const (
 	cnNegativePrefix = rune('负')
+	decimalPoint     = rune('点')
 )
 
 // MustDecodeToInt64 : decode a chinese number string into Int64 without error
@@ -93,7 +132,7 @@ func decodeToInt64(chars []rune) (res int64, err error) {
 		chars = chars[1:]
 	}
 	// deal with '万' & '亿'
-	for _, specialUnit := range cnSpecialUnit {
+	for _, specialUnit := range cnSpecialUnits {
 		var left, right int64
 		for idx := len(chars) - 1; idx >= 0; idx-- {
 			if chars[idx] == specialUnit.cn {
@@ -133,6 +172,7 @@ func decodeToInt64(chars []rune) (res int64, err error) {
 }
 
 var numCn = map[uint64]rune{
+	0: '零',
 	1: '一',
 	2: '二',
 	3: '三',
@@ -151,17 +191,20 @@ func EncodeFromInt64(num int64) string {
 	}
 	if num < 0 {
 		if num == math.MinInt64 {
-			return string(append([]rune{cnNegativePrefix}, encodeFromInt64Helper(uint64(math.MaxInt64)+1)...))
+			return string(append([]rune{cnNegativePrefix}, encodeWithoutYISHI(uint64(math.MaxInt64)+1)...))
 		}
-		return string(append([]rune{cnNegativePrefix}, encodeFromInt64Helper(uint64(-num))...))
+		return string(append([]rune{cnNegativePrefix}, encodeWithoutYISHI(uint64(-num))...))
 	}
+	return string(encodeWithoutYISHI(uint64(num)))
+}
 
+// encode Wrapper that remove "一十"
+func encodeWithoutYISHI(num uint64) (res []rune) {
 	ch := encodeFromInt64Helper(uint64(num))
-
 	if len(ch) >= 2 && ch[0] == '一' && ch[1] == '十' {
-		return string(ch[1:])
+		return ch[1:]
 	}
-	return string(ch)
+	return ch
 }
 
 // encode
@@ -219,6 +262,174 @@ func encodeSmallNum(num uint64) (res []rune) {
 	}
 	if ge != 0 {
 		res = append(res, numCn[ge])
+	}
+	return res
+}
+
+// MustDecodeToFloat64 : decode a chinese number string into Float64 without error
+func MustDecodeToFloat64(cn string) float64 {
+	res, err := DecodeToFloat64(cn)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
+
+// DecodeToFloat64 : decode a chinese number string into Float64
+func DecodeToFloat64(cn string) (float64, error) {
+	chars := []rune(cn)
+	// positive or negative
+	sign := float64(1)
+	if chars[0] == cnNegativePrefix {
+		sign = float64(-1)
+		chars = chars[1:]
+	}
+	res, err := decodeToFloat64(chars)
+	return res * sign, err
+}
+
+func decodeToFloat64(chars []rune) (res float64, err error) {
+	// deal with decimal point
+	for idx := len(chars) - 1; idx >= 0; idx-- {
+		if chars[idx] == decimalPoint {
+			integralPart, err := decodeToFloat64(chars[0:idx])
+			if err != nil {
+				return 0, err
+			}
+			decimalPart, err := decodeAfterDecimalPoint(chars[idx+1:])
+			if err != nil {
+				return 0, err
+			}
+			return integralPart + decimalPart, nil
+		}
+	}
+	// deal with '万' & '亿'
+	for _, specialUnit := range cnExtremeUnits {
+		var left, right float64
+		for idx := len(chars) - 1; idx >= 0; idx-- {
+			if chars[idx] == specialUnit.cn {
+				left, err = decodeToFloat64(chars[:idx])
+				if err != nil {
+					return 0, err
+				}
+				if idx == len(chars)-1 {
+					right = 0
+				} else {
+					right, err = decodeToFloat64(chars[idx+1:])
+					if err != nil {
+						return 0, err
+					}
+				}
+				return left*specialUnit.unit + right, nil
+			}
+		}
+	}
+	unit := float64(1) // current unit
+	for i := len(chars) - 1; i >= 0; i-- {
+		char := chars[i]
+		if u, exist := cnUnit[char]; exist {
+			unit = float64(u)
+			if i == 0 {
+				res += 10
+			}
+			continue
+		}
+		if n, exist := cnNum[char]; exist {
+			res += unit * float64(n)
+		} else {
+			return 0, fmt.Errorf("confusing character %s", string(char))
+		}
+	}
+	return res, nil
+}
+
+func decodeAfterDecimalPoint(chars []rune) (res float64, err error) {
+	unit := float64(0.1)
+	for _, char := range chars {
+		if num, exist := cnNum[char]; exist {
+			res += unit * float64(num)
+		} else {
+			return 0, fmt.Errorf("confusing character %s", string(char))
+		}
+		unit /= 10
+	}
+	return res, nil
+}
+
+// EncodeFromFloat64 : convert float64 into Chinese number
+// 由于float64固然存在的精度问题，本函数可能不会特别精准。所以小数部分最多精确到6位。
+func EncodeFromFloat64(num float64) string {
+	if num < 0 {
+		return string(cnNegativePrefix) + EncodeFromFloat64(-num)
+	}
+	integralPart := math.Floor(num)
+	decimalPart := num - integralPart
+	var integralRunes, decimalRunes, resRunes []rune
+	if integralPart == 0 {
+		integralRunes = []rune{'零'}
+	} else {
+		integralRunes = encodeFromFloat64Helper(integralPart)
+	}
+	if len(integralRunes) >= 2 && integralRunes[0] == '一' && integralRunes[1] == '十' {
+
+		integralRunes = integralRunes[1:]
+	}
+	if decimalPart != 0 {
+		decimalRunes = encodeDecimalPart(decimalPart)
+		resRunes = append(integralRunes, decimalPoint)
+		resRunes = append(resRunes, decimalRunes...)
+	} else {
+		resRunes = integralRunes
+	}
+	return string(resRunes)
+}
+
+// encodeHelper
+func encodeFromFloat64Helper(num float64) (res []rune) {
+	yi := num / 100000000
+	if yi >= 1 {
+		innerYi := num - math.Floor(num/100000000)*100000000
+		left := append(encodeFromFloat64Helper(yi), '亿')
+		right := encodeFromFloat64Helper(innerYi)
+		// 若千位不为零，且万位为零；或者是千万位不为零，且亿位为零，则不需要补读零。
+		// 例如：205,000读作“二十万五千”。
+		if innerYi >= 1 && innerYi < 10000000 {
+			left = append(left, '零')
+		}
+		return append(left, right...)
+	}
+	wan := num / 10000
+	if wan >= 1 {
+		innerWan := num - math.Floor(num/10000)*10000
+		left := append(encodeFromFloat64Helper(wan), '万')
+		right := encodeFromFloat64Helper(innerWan)
+		// 若千位不为零，且万位为零；或者是千万位不为零，且亿位为零，则不需要补读零。
+		// 例如：205,000读作“二十万五千”。
+		if innerWan >= 1 && innerWan < 1000 {
+			left = append(left, '零')
+		}
+		return append(left, right...)
+	}
+	return encodeSmallNum(uint64(num))
+}
+
+func encodeDecimalPart(num float64) []rune {
+	num *= 1e7
+	preciseNum := uint64(math.Round(num))
+	res := make([]rune, 0)
+	cnt := 6
+	for preciseNum != 0 {
+		if cnt == 0 {
+			break
+		}
+		pos := uint64(1)
+		for i := 0; i < cnt; i++ {
+			pos *= 10
+		}
+		cur := preciseNum / pos
+		res = append(res, numCn[uint64(cur)])
+		preciseNum -= pos * cur
+		cnt--
 	}
 	return res
 }
